@@ -1,0 +1,105 @@
+buildscript {
+    repositories {
+        maven { url "https://plugins.gradle.org/m2/" }
+    }
+    dependencies {
+        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.18'
+    }
+}
+
+plugins {
+    id 'application'
+    id 'java'
+    id 'idea'
+    id 'com.google.protobuf' version "0.8.18"
+}
+
+group 'cn.fkj233'
+version '1.0-SNAPSHOT'
+
+compileJava.options.encoding = "UTF-8"
+compileTestJava.options.encoding = "UTF-8"
+
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
+sourceCompatibility = 17
+targetCompatibility = 17
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'com.google.protobuf', name: 'protobuf-java', version: '3.18.2'
+    implementation group: 'io.javalin', name: 'javalin', version: '4.6.4'
+    implementation group: 'com.google.code.gson', name: 'gson', version: '2.9.0'
+    implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
+    implementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.36'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.13.3'
+    implementation group: 'org.jline', name: 'jline', version: '3.21.0'
+    implementation group: 'org.jline', name: 'jline-terminal-jna', version: '3.21.0'
+    protobuf files('proto/')
+}
+
+application {
+    // Define the main class for the application
+    getMainClass().set('cn.fkj233.GenshinDispatch')
+}
+
+configurations.all {
+    exclude group: 'org.slf4j', module: 'slf4j'
+}
+
+jar {
+    exclude '*.proto'
+
+    manifest {
+        attributes 'Main-Class': 'cn.fkj233.GenshinDispatch'
+    }
+
+    archiveBaseName = 'genshindispatch'
+    if (project.hasProperty('jarFilename')) {
+        archiveFileName = "${jarFilename}.${extension}"
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    destinationDirectory = file(".")
+}
+
+clean {
+    delete protobuf.generatedFilesBaseDir
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.18.1'
+    }
+    generatedFilesBaseDir = "$projectDir/src/generated/"
+}
+
+sourceSets {
+    main {
+        proto {
+            srcDir 'src/generated'
+        }
+        java {
+            srcDir 'src/java'
+        }
+    }
+}
+
+idea {
+    module {
+        sourceDirs += file("/proto/");
+    }
+}
+
+processResources {
+    dependsOn "generateProto"
+}

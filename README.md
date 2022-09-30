@@ -1,0 +1,2 @@
+# GenshinDispatch
+ Dispatch server
