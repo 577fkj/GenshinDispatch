@@ -11,8 +11,6 @@ public class Config {
 
     public Region[] regions = {new Region()};
 
-    public String defaultName = "Grasscutter";
-
     public static class Region {
         public Region() { }
 
