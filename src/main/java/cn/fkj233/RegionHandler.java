@@ -14,6 +14,8 @@ import io.javalin.http.Context;
 import javax.crypto.Cipher;
 import java.io.ByteArrayOutputStream;
 import java.security.Signature;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -27,6 +29,7 @@ import static cn.fkj233.GenshinDispatch.logger;
  */
 public final class RegionHandler implements Router {
     private static final Map<String, RegionData> regions = new ConcurrentHashMap<>();
+    private static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public static String lr(String left, String right) {
         return left.isEmpty() ? right : left;
@@ -45,7 +48,7 @@ public final class RegionHandler implements Router {
     /**
      * @route /query_region_list
      */
-    private static void queryRegionList(Context ctx) {
+    private static void queryRegionList(Context ctx) throws ParseException {
         String dispatchDomain = "http" + (config.useEncryption ? "s" : "") + "://"
                 + lr(config.accessAddress, config.bindAddress) + ":"
                 + lr(config.accessPort, config.bindPort);
@@ -71,24 +74,31 @@ public final class RegionHandler implements Router {
                     .setGateserverIp(region.Ip).setGateserverPort(region.Port)
                     .setSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
                     .build();
-            QueryCurrRegionHttpRsp updatedQuery;
+            QueryCurrRegionHttpRsp updatedQuery = null;
             if (region.Run) {
                 updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
                         .setRegionInfo(regionInfo)
                         .build();
             } else {
-                updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
-                        .setRegionInfo(regionInfo)
-                        // 停服维护不起作用
-                        .setStopServer(StopServerInfo.newBuilder()
-                                .setStopEndTime(1667141764)
-                                .setStopBeginTime(1664549764)
-                                .setContentMsg("测试")
-                                .setUrl("https://www.baidu.com")
-                                .build())
-                        .build();
+                try {
+                    updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
+                            .setRegionInfo(regionInfo)
+                            .setRetcode(11)
+                            .setMsg(region.stopServer.Title)
+                            .setStopServer(StopServerInfo.newBuilder()
+                                    .setStopBeginTime(Math.toIntExact(dateFormat.parse(region.stopServer.StartTime).getTime() / 1000))
+                                    .setStopEndTime(Math.toIntExact(dateFormat.parse(region.stopServer.StopTime).getTime() / 1000))
+                                    .setContentMsg(region.stopServer.Msg)
+                                    .setUrl(region.stopServer.Url)
+                                    .build())
+                            .build();
+                } catch (ParseException e) {
+                    logger.info("parse time failed.");
+                }
             }
-            regions.put(region.Name, new RegionData(updatedQuery, Base64.getEncoder().encodeToString(updatedQuery.toByteString().toByteArray())));
+            if (updatedQuery != null) {
+                regions.put(region.Name, new RegionData(updatedQuery, Base64.getEncoder().encodeToString(updatedQuery.toByteString().toByteArray())));
+            }
         });
 
         byte[] customConfig = "{\"sdkenv\":\"2\",\"checkdevice\":\"false\",\"loadPatch\":\"false\",\"showexception\":\"false\",\"regionConfig\":\"pm|fk|add\",\"downloadMode\":\"0\"}".getBytes();

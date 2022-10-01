@@ -30,5 +30,14 @@ public class Config {
         public String Ip = "127.0.0.1";
         public int Port = 22102;
         public boolean Run = true;
+        public StopServer stopServer = new StopServer();
+    }
+
+    public static class StopServer {
+        public String Title = "停服维护";
+        public String StartTime = "2022-10-01 00:00:00";
+        public String StopTime = "2022-10-07 00:00:00";
+        public String Msg = "更新";
+        public String Url = "https://www.baidu.com";
     }
 }

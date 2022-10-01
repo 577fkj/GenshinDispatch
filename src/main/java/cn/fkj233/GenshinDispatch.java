@@ -106,8 +106,8 @@ public class GenshinDispatch {
                         logger.info("list");
                         logger.info("add <name> <title> <ip> <port>");
                         logger.info("del <name>");
-                        logger.info("start <name> TODO: not use");
-                        logger.info("stop <name> TODO: not use");
+                        logger.info("start <name>");
+                        logger.info("stop <name>");
                         logger.info("reload");
                         logger.info("kill-server");
                         logger.info("help");
