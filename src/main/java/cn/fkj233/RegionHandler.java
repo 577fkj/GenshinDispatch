@@ -48,7 +48,7 @@ public final class RegionHandler implements Router {
     /**
      * @route /query_region_list
      */
-    private static void queryRegionList(Context ctx) throws ParseException {
+    private static void queryRegionList(Context ctx) {
         String dispatchDomain = "http" + (config.useEncryption ? "s" : "") + "://"
                 + lr(config.accessAddress, config.bindAddress) + ":"
                 + lr(config.accessPort, config.bindPort);
