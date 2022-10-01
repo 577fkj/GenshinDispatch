@@ -108,6 +108,7 @@ public class GenshinDispatch {
                         logger.info("del <name>");
                         logger.info("start <name> TODO: not use");
                         logger.info("stop <name> TODO: not use");
+                        logger.info("reload");
                         logger.info("kill-server");
                         logger.info("help");
                         break;
@@ -180,10 +181,18 @@ public class GenshinDispatch {
                             }
                         }
                         break;
+                    case "reload":
+                        loadConfig();
+                        logger.info("reload config success!");
+                        break;
                     case "kill-server":
                         System.exit(1000);
+                        break;
+                    case "":
+                        break;
                     default:
                         logger.info("Unknown command!");
+                        break;
                 }
                 saveConfig();
             } catch (Exception e) {
