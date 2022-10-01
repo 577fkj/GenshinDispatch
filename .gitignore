@@ -29,3 +29,4 @@ replay_pid*
 /build
 /src/generated
 config.json
+/tools/node_modules

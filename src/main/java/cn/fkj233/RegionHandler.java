@@ -13,6 +13,7 @@ import io.javalin.http.Context;
 
 import javax.crypto.Cipher;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.Signature;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -28,7 +29,6 @@ import static cn.fkj233.GenshinDispatch.logger;
  * Handles requests related to region queries.
  */
 public final class RegionHandler implements Router {
-    private static final Map<String, RegionData> regions = new ConcurrentHashMap<>();
     private static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public static String lr(String left, String right) {
@@ -68,37 +68,8 @@ public final class RegionHandler implements Router {
                     .setName(region.Name).setTitle(region.Title).setType("DEV_PUBLIC")
                     .setDispatchUrl(dispatchDomain + "/query_cur_region/" + region.Name)
                     .build();
-            usedNames.add(region.Name); servers.add(identifier);
-
-            var regionInfo = RegionInfo.newBuilder()
-                    .setGateserverIp(region.Ip).setGateserverPort(region.Port)
-                    .setSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
-                    .build();
-            QueryCurrRegionHttpRsp updatedQuery = null;
-            if (region.Run) {
-                updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
-                        .setRegionInfo(regionInfo)
-                        .build();
-            } else {
-                try {
-                    updatedQuery = QueryCurrRegionHttpRsp.newBuilder()
-                            .setRegionInfo(regionInfo)
-                            .setRetcode(11)
-                            .setMsg(region.stopServer.Title)
-                            .setStopServer(StopServerInfo.newBuilder()
-                                    .setStopBeginTime(Math.toIntExact(dateFormat.parse(region.stopServer.StartTime).getTime() / 1000))
-                                    .setStopEndTime(Math.toIntExact(dateFormat.parse(region.stopServer.StopTime).getTime() / 1000))
-                                    .setContentMsg(region.stopServer.Msg)
-                                    .setUrl(region.stopServer.Url)
-                                    .build())
-                            .build();
-                } catch (ParseException e) {
-                    logger.info("parse time failed.");
-                }
-            }
-            if (updatedQuery != null) {
-                regions.put(region.Name, new RegionData(updatedQuery, Base64.getEncoder().encodeToString(updatedQuery.toByteString().toByteArray())));
-            }
+            usedNames.add(region.Name);
+            servers.add(identifier);
         });
 
         byte[] customConfig = "{\"sdkenv\":\"2\",\"checkdevice\":\"false\",\"loadPatch\":\"false\",\"showexception\":\"false\",\"regionConfig\":\"pm|fk|add\",\"downloadMode\":\"0\"}".getBytes();
@@ -115,6 +86,54 @@ public final class RegionHandler implements Router {
         logger.info(String.format("[Dispatch] Client %s request: query_region_list", ctx.ip()));
     }
 
+    private static QueryCurrRegionHttpRsp getCurrRegion(String key, String version) {
+        Config.Region region = null;
+        for (var data : config.regions) {
+            if (data.Name.equals(key)) {
+                region = data;
+                break;
+            }
+        }
+
+        if (region == null) return null;
+
+        var regionInfo = RegionInfo.newBuilder()
+                .setGateserverIp(region.Ip)
+                .setGateserverPort(region.Port)
+                .setSecretKey(ByteString.copyFrom(Crypto.DISPATCH_SEED))
+                .build();
+        QueryCurrRegionHttpRsp.Builder updatedQuery = QueryCurrRegionHttpRsp.newBuilder().setRegionInfo(regionInfo);
+        if (region.Run && version != null && region.VersionCheck != null) {
+            String versionCode = version.replaceAll(Pattern.compile("[a-zA-Z]").pattern(), "");
+            String needVersionCode = region.VersionCheck.Version.replaceAll(Pattern.compile("[a-zA-Z]").pattern(), "");
+            if (!versionCode.equals(needVersionCode)) {
+                updatedQuery
+                        .setRetcode(20)
+                        .setMsg(region.VersionCheck.Msg)
+                        .setForceUdpate(ForceUpdateInfo.newBuilder()
+                                .setForceUpdateUrl(region.VersionCheck.Url)
+                                .build()
+                        );
+            }
+        } else {
+            try {
+                updatedQuery
+                        .setRetcode(11)
+                        .setMsg(region.StopServer.Title)
+                        .setStopServer(StopServerInfo.newBuilder()
+                                .setStopBeginTime(Math.toIntExact(dateFormat.parse(region.StopServer.StartTime).getTime() / 1000))
+                                .setStopEndTime(Math.toIntExact(dateFormat.parse(region.StopServer.StopTime).getTime() / 1000))
+                                .setContentMsg(region.StopServer.Msg)
+                                .setUrl(region.StopServer.Url)
+                                .build()
+                        );
+            } catch (ParseException e) {
+                logger.info("parse time failed.");
+            }
+        }
+        return updatedQuery.build();
+    }
+
     /**
      * @route /query_cur_region/{region}
      */
@@ -122,29 +141,24 @@ public final class RegionHandler implements Router {
         // Get region to query.
         String regionName = ctx.pathParam("region");
         String versionName = ctx.queryParam("version");
-        var region = regions.get(regionName);
+        var region = getCurrRegion(regionName, versionName);
 
         // Get region data.
-        String regionData = "CAESGE5vdCBGb3VuZCB2ZXJzaW9uIGNvbmZpZw==";
+        byte[] regionData = "CAESGE5vdCBGb3VuZCB2ZXJzaW9uIGNvbmZpZw==".getBytes(StandardCharsets.UTF_8);
         if (ctx.queryParamMap().values().size() > 0) {
             if (region != null)
-                regionData = region.getBase64();
+                regionData = region.toByteString().toByteArray();
         }
 
-
-        int versionMajor;
-        int versionMinor;
-        int versionFix;
-        if (versionName != null) {
-            String[] versionCode = versionName.replaceAll(Pattern.compile("[a-zA-Z]").pattern(), "").split("\\.");
-            versionMajor = Integer.parseInt(versionCode[0]);
-            versionMinor = Integer.parseInt(versionCode[1]);
-            versionFix = Integer.parseInt(versionCode[2]);
-        } else {
-            versionMajor = 3;
-            versionMinor = 1;
-            versionFix = 0;
+        if (versionName == null) {
+            ctx.result(regionData);
+            return;
         }
+
+        String[] versionCode = versionName.replaceAll(Pattern.compile("[a-zA-Z]").pattern(), "").split("\\.");
+        int versionMajor = Integer.parseInt(versionCode[0]);
+        int versionMinor = Integer.parseInt(versionCode[1]);
+        int versionFix = Integer.parseInt(versionCode[2]);
 
         if (versionMajor >= 3 || (versionMajor == 2 && versionMinor == 7 && versionFix >= 50) || (versionMajor == 2 && versionMinor == 8)) {
             try {
@@ -153,7 +167,7 @@ public final class RegionHandler implements Router {
                     // More love for UA Patch players
                     var rsp = new QueryCurRegionRspJson();
 
-                    rsp.content = regionData;
+                    rsp.content = Base64.getEncoder().encodeToString(regionData);
                     rsp.sign = "TW9yZSBsb3ZlIGZvciBVQSBQYXRjaCBwbGF5ZXJz";
 
                     ctx.json(rsp);
@@ -163,25 +177,24 @@ public final class RegionHandler implements Router {
                 String key_id = ctx.queryParam("key_id");
                 Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
                 cipher.init(Cipher.ENCRYPT_MODE, Objects.equals(key_id, "3") ? Crypto.CUR_OS_ENCRYPT_KEY : Crypto.CUR_CN_ENCRYPT_KEY);
-                var regionInfo = Base64.getDecoder().decode(regionData);
 
                 //Encrypt regionInfo in chunks
                 ByteArrayOutputStream encryptedRegionInfoStream = new ByteArrayOutputStream();
 
                 //Thank you so much GH Copilot
                 int chunkSize = 256 - 11;
-                int regionInfoLength = regionInfo.length;
+                int regionInfoLength = regionData.length;
                 int numChunks = (int) Math.ceil(regionInfoLength / (double) chunkSize);
 
                 for (int i = 0; i < numChunks; i++) {
-                    byte[] chunk = Arrays.copyOfRange(regionInfo, i * chunkSize, Math.min((i + 1) * chunkSize, regionInfoLength));
+                    byte[] chunk = Arrays.copyOfRange(regionData, i * chunkSize, Math.min((i + 1) * chunkSize, regionInfoLength));
                     byte[] encryptedChunk = cipher.doFinal(chunk);
                     encryptedRegionInfoStream.write(encryptedChunk);
                 }
 
                 Signature privateSignature = Signature.getInstance("SHA256withRSA");
                 privateSignature.initSign(Crypto.CUR_SIGNING_KEY);
-                privateSignature.update(regionInfo);
+                privateSignature.update(regionData);
 
                 var rsp = new QueryCurRegionRspJson();
 
