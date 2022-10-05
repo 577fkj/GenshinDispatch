@@ -6,7 +6,7 @@ const KEY_SIZE = 256
 
 // keyId = 2 国服
 // keyId = 3 海外服
-// const pubKey = fs.readFileSync('../keys/OSCB_Pub.pem')
+const pubKey = fs.readFileSync('./OS.pem')
 const privKey = fs.readFileSync('../keys/OSCB.pem')
 
 let rawData = fs.readFileSync('./data.json')
@@ -28,11 +28,11 @@ while (content.length > 0) {
 }
 
 let result = Buffer.concat(res)
-// let verified = crypto.createVerify('RSA-SHA256')
-//     .update(result)
-//     .verify(pubKey, sign)
+let verified = crypto.createVerify('RSA-SHA256')
+    .update(result)
+    .verify(pubKey, sign)
 
-// console.log('Verified signature =>', verified)
+console.log('Verified signature =>', verified)
 
 protobuf.load('schema.proto', function (err, root) {
     if (err)
