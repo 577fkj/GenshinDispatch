@@ -1,7 +1,6 @@
 const fs = require('fs')
 const protobuf = require("protobufjs");
-
-let result = Buffer.from(fs.readFileSync('./data.txt'), 'base64')
+let result = Buffer.from(fs.readFileSync('./data.txt').toString(), 'base64')
 
 protobuf.load('schema.proto', function (err, root) {
     if (err)
